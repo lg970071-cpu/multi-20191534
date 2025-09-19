@@ -1,106 +1,97 @@
 #include <stdio.h>
 #include <math.h>
-#include <unistd.h> // macOS용 usleep 함수를 사용하기 위한 헤더 파일
+#include <unistd.h>
+#include <stdlib.h>
 
-#define PI 3.14159226535897
-
-void moveCursor(int x, int y)
-{
-    printf("\x1b[%d;%dH",y,x);
+void moveCursor(int x, int y) {
+    printf("\x1b[%d;%dH", y, x);
 }
 
-// 매개변수 isExploded
-// 0: 폭발전 폭탄
-// 1: 폭발함
-void printBomb(int isExploded)
-{
-    if(isExploded)
-    { 
-        printf("\x1b[A^^^^^^^");
-        printf("\x1b[B\x1b[7D!!BAM!!"); 
-        printf("\x1b[B\x1b[7D^^^^^^^");
-    }
-    else
-        printf("(  b  )"); 
-}
-
-int main()
-{
-    // 여기부터 코드를 작성하세요----------------------
-
-    // 심지 시작 위치 설정 (문제에서 주어진 14, 9와는 다르게, 14, 9에서 시작하도록 수정)
-    int fuse_x = 14;
-    int fuse_y = 9;
-
-    // 폭탄 위치
-    int bomb_x = 15;
-    int bomb_y = 10;
-
-    // 초기 화면 정리
-    printf("\x1b[2J");
-    printf("\x1b[H");
-
-    // 폭탄 그리기
-    moveCursor(bomb_x, bomb_y);
-    printBomb(0);
-
-    // 심지 그리기 (나선형)
-    double angle = 0;
-    int steps = 50;
-    for (int i = 0; i < steps; i++) {
-        double radius = 0.3 * angle;
-        int x = (int)(radius * cos(angle)) + fuse_x;
-        int y = (int)(radius * sin(angle)) + fuse_y;
+void printBomb(int x, int y, int isExploded) {
+    if(isExploded) {
+        moveCursor(x - 4, y - 1);
+        printf("  ^^^^^^^  ");
+        moveCursor(x - 4, y);
+        printf(" !!BAM!! ");
+        moveCursor(x - 4, y + 1);
+        printf("  ^^^^^^^  ");
+    } else {
         moveCursor(x, y);
-        printf("#");
-        angle += 0.2;
+        printf("( b )");
     }
+}
 
-    // 불꽃(*) 초기 위치
-    moveCursor(fuse_x, fuse_y);
-    printf("*");
-    fflush(stdout);
+typedef struct {
+    int x;
+    int y;
+} Point;
 
-    // 심지 태우기
-    angle = 0;
-    for (int i = 0; i < steps; i++) {
-        // 이전 위치 지우기
-        double old_radius = 0.3 * (angle - 0.2);
-        int old_x = (int)(old_radius * cos(angle - 0.2)) + fuse_x;
-        int old_y = (int)(old_radius * sin(angle - 0.2)) + fuse_y;
-        moveCursor(old_x, old_y);
-        printf(" ");
-        
-        // 새 위치에 * 그리기
-        double new_radius = 0.3 * angle;
-        int new_x = (int)(new_radius * cos(angle)) + fuse_x;
-        int new_y = (int)(new_radius * sin(angle)) + fuse_y;
-        moveCursor(new_x, new_y);
-        printf("*");
-        fflush(stdout);
-        
-        // 폭탄에 도달했는지 확인 (단순하게 좌표 비교)
-        if (new_x == bomb_x && new_y == bomb_y) {
-            break;
+int main() {
+    const int FUSE_LENGTH = 68;
+    Point path[FUSE_LENGTH];
+
+    printf("\x1b[?25l");
+    system("clear");
+
+    const int num_segments = 12;
+    int segment_lengths[] = {1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    
+    int x = 14, y = 9;
+    int path_index = 0;
+    int direction = 2; // 0:UP, 1:LEFT, 2:DOWN, 3:RIGHT
+
+    path[path_index].x = x;
+    path[path_index].y = y;
+    path_index++;
+
+    for (int seg = 0; seg < num_segments; seg++) {
+        for (int step = 0; step < segment_lengths[seg]; step++) {
+            if (path_index >= FUSE_LENGTH) break;
+            
+            switch (direction) {
+                case 0: y--; break;
+                case 1: x--; break;
+                case 2: y++; break;
+                case 3: x++; break;
+            }
+
+            path[path_index].x = x;
+            path[path_index].y = y;
+            path_index++;
         }
-
-        usleep(200000); // 200ms 대기
-        angle += 0.2;
+        direction = (direction + 1) % 4;
+    }
+    
+    Point bomb_pos = path[FUSE_LENGTH - 1];
+    
+    for (int i = 0; i < FUSE_LENGTH - 1; i++) {
+        moveCursor(path[i].x, path[i].y);
+        printf("#");
     }
 
-    // 폭파
-    moveCursor(bomb_x, bomb_y);
-    printBomb(1);
+    int bomb_x = bomb_pos.x - 2;
+    int bomb_y = bomb_pos.y;
+    printBomb(bomb_x, bomb_y, 0);
     fflush(stdout);
+    
+    for (int i = 0; i < FUSE_LENGTH; i++) {
+        moveCursor(path[i].x, path[i].y);
+        printf("*");
+        
+        fflush(stdout);
+        usleep(200 * 1000);
 
-    // 폭파 후 잠시 대기
-    usleep(2000000); // 2초 대기
+        moveCursor(path[i].x, path[i].y);
+        printf(" ");
+    }
+    
+    moveCursor(bomb_x, bomb_y);
+    printf("     ");
+    
+    printBomb(bomb_x, bomb_y, 1);
 
-    // 화면 정리 및 커서 이동
-    printf("\x1b[2J");
-    printf("\x1b[H");
+    moveCursor(0, 20);
+    printf("\x1b[?25h");
 
-    // 여기까지 코드를 작성하세요----------------------
-    moveCursor(10, 20);
     return 0;
 }
